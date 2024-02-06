@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/ndfsa/spotify-backup/auth"
 	"github.com/ndfsa/spotify-backup/core"
@@ -12,7 +14,6 @@ func main() {
 	ch := make(chan *spotify.Client)
 	auth.SetupAuth(ch)
 
-	// wait for client creation
 	client := <-ch
 
 	favorites, err := core.GetFavorites(client)
@@ -20,9 +21,16 @@ func main() {
 		log.Fatal(err)
 	}
 
+	currentDate := time.Now()
+	fileName := fmt.Sprintf("backup-%d-%02d-%02d.csv",
+		currentDate.Year(),
+		currentDate.Month(),
+		currentDate.Day())
+
 	core.WriteToFile(
 		favorites,
-		core.FieldAddedAt|
+		core.FieldNumber|
+			core.FieldAddedAt|
 			core.FieldAlbum|
 			core.FieldArtists|
 			core.FieldDuration|
@@ -30,5 +38,5 @@ func main() {
 			core.FieldId|
 			core.FieldName,
 		core.CsvEncoder{Separator: '\t'},
-		"backup.csv")
+		fileName)
 }

@@ -40,6 +40,8 @@ func SetupAuth(ch chan<- *spotify.Client) {
 		// create new spotify client
 		client := spotify.New(auth.Client(r.Context(), token))
 
+		fmt.Fprint(w, "Login successful!")
+
 		// send client to chanel
 		ch <- client
 	})

@@ -26,7 +26,7 @@ func GetFavorites(client *spotify.Client) ([]spotify.SavedTrack, error) {
 
 func WriteToFile(
 	savedTracks []spotify.SavedTrack,
-	fields uint,
+	fields uint64,
 	encoder SavedTracksEncoder,
 	fileName string) error {
 

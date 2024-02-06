@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 	"math/bits"
 	"strconv"
@@ -10,33 +11,42 @@ import (
 )
 
 const (
-	FieldAddedAt  uint = 1 << 0
-	FieldAlbum    uint = 1 << 1
-	FieldArtists  uint = 1 << 2
-	FieldDuration uint = 1 << 3
-	FieldExplicit uint = 1 << 4
-	FieldId       uint = 1 << 5
-	FieldName     uint = 1 << 6
+	// track general info
+	FieldNumber   uint64 = 1 << 0
+	FieldAddedAt  uint64 = 1 << 1
+	FieldAlbum    uint64 = 1 << 2
+	FieldArtists  uint64 = 1 << 3
+	FieldDuration uint64 = 1 << 4
+	FieldExplicit uint64 = 1 << 5
+	FieldId       uint64 = 1 << 6
+	FieldName     uint64 = 1 << 7
+
+	// track features
+
+	// track analysis
 )
 
 type SavedTracksEncoder interface {
-	Encode([]spotify.SavedTrack, uint, io.Writer) error
+	Encode([]spotify.SavedTrack, uint64, io.Writer) error
 }
 
 type CsvEncoder struct {
 	Separator rune
 }
 
-func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint, w io.Writer) error {
+func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint64, w io.Writer) error {
 
 	// create records array to encode later
 	records := make([][]string, 0, len(items))
 
 	// count number of fields each
-	fieldCount := bits.OnesCount(fields)
+	fieldCount := bits.OnesCount64(fields)
 	header := make([]string, 0, fieldCount)
 
 	// create header dinamically
+	if FieldNumber&fields != 0 {
+		header = append(header, "num")
+	}
 	if FieldAddedAt&fields != 0 {
 		header = append(header, "added_at")
 	}
@@ -61,7 +71,7 @@ func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint, w io.Write
 
 	records = append(records, header)
 
-	for _, item := range items {
+	for idx, item := range items {
 
 		// whether or not it is needed to unwrap artist array
 		unwrapArtists := false
@@ -70,6 +80,10 @@ func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint, w io.Write
 
 		// current record to build
 		current := make([]string, 0, fieldCount)
+		if FieldAddedAt&fields != 0 {
+			current = append(current, fmt.Sprint(idx+1))
+			artistPos++
+		}
 		if FieldAddedAt&fields != 0 {
 			current = append(current, item.AddedAt)
 			artistPos++
