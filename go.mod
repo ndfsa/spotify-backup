@@ -1,6 +1,6 @@
 module github.com/ndfsa/spotify-backup
 
-go 1.21.3
+go 1.22.0
 
 require (
 	github.com/golang/protobuf v1.5.2 // indirect
