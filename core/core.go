@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/ndfsa/spotify-backup/core/encoders"
 	"github.com/zmb3/spotify/v2"
 )
 
@@ -27,15 +28,20 @@ func GetFavorites(client *spotify.Client) ([]spotify.SavedTrack, error) {
 func WriteToFile(
 	savedTracks []spotify.SavedTrack,
 	fields uint64,
-	encoder SavedTracksEncoder,
+	encoder encoders.SavedTracksEncoder,
 	fileName string) error {
 
 	f, err := os.Create(fileName)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
+
 	w := bufio.NewWriter(f)
 	if err := encoder.Encode(savedTracks, fields, w); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
 		return err
 	}
 

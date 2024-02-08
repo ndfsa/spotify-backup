@@ -1,4 +1,4 @@
-package core
+package encoders
 
 import (
 	"encoding/csv"
@@ -11,24 +11,15 @@ import (
 )
 
 const (
-	// track general info
-	FieldNumber   uint64 = 1 << 0
-	FieldAddedAt  uint64 = 1 << 1
-	FieldAlbum    uint64 = 1 << 2
-	FieldArtists  uint64 = 1 << 3
-	FieldDuration uint64 = 1 << 4
-	FieldExplicit uint64 = 1 << 5
-	FieldId       uint64 = 1 << 6
-	FieldName     uint64 = 1 << 7
-
-	// track features
-
-	// track analysis
+	TagNumber   string = "num"
+	TagAddedAt  string = "added_at"
+	TagAlbum    string = "album"
+	TagArtists  string = "artists"
+	TagDuration string = "duration"
+	TagExplicit string = "explicit"
+	TagId       string = "id"
+	TagName     string = "name"
 )
-
-type SavedTracksEncoder interface {
-	Encode([]spotify.SavedTrack, uint64, io.Writer) error
-}
 
 type CsvEncoder struct {
 	Separator rune
@@ -39,41 +30,41 @@ func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint64, w io.Wri
 	// create records array to encode later
 	records := make([][]string, 0, len(items))
 
-	// count number of fields each
+	// count number of fields
 	fieldCount := bits.OnesCount64(fields)
 	header := make([]string, 0, fieldCount)
 
-	// create header dinamically
+	// create header
 	if FieldNumber&fields != 0 {
-		header = append(header, "num")
+		header = append(header, TagNumber)
 	}
 	if FieldAddedAt&fields != 0 {
-		header = append(header, "added_at")
+		header = append(header, TagAddedAt)
 	}
 	if FieldAlbum&fields != 0 {
-		header = append(header, "album")
+		header = append(header, TagAlbum)
 	}
 	if FieldArtists&fields != 0 {
-		header = append(header, "artist")
+		header = append(header, TagArtists)
 	}
 	if FieldDuration&fields != 0 {
-		header = append(header, "duration")
+		header = append(header, TagDuration)
 	}
 	if FieldExplicit&fields != 0 {
-		header = append(header, "explicit")
+		header = append(header, TagExplicit)
 	}
 	if FieldId&fields != 0 {
-		header = append(header, "id")
+		header = append(header, TagId)
 	}
 	if FieldName&fields != 0 {
-		header = append(header, "name")
+		header = append(header, TagName)
 	}
 
 	records = append(records, header)
 
 	for idx, item := range items {
 
-		// whether or not it is needed to unwrap artist array
+		// whether or to unwrap the artists list into separate entries
 		unwrapArtists := false
 		// keep track of where the artist field is located
 		artistPos := 0
@@ -118,7 +109,7 @@ func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint64, w io.Wri
 		}
 
 		if unwrapArtists {
-			// repeat records for multiple artists
+			// repeat records when the track has multiple artists
 			for _, artist := range item.Artists {
 				currentCopy := make([]string, fieldCount)
 				copy(currentCopy, current)
@@ -137,7 +128,6 @@ func (enc CsvEncoder) Encode(items []spotify.SavedTrack, fields uint64, w io.Wri
 	if err := csvWriter.WriteAll(records); err != nil {
 		return err
 	}
-	csvWriter.Flush()
 
 	return nil
 }
