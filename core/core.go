@@ -13,6 +13,8 @@ func GetFavorites(client *spotify.Client) ([]spotify.SavedTrack, error) {
 	savedTracks := make([]spotify.SavedTrack, 0, 50)
 
 	savedTrackPage, err := client.CurrentUsersTracks(context.Background(), spotify.Limit(50))
+	// useful for progress bar
+	// total := savedTrackPage.Total
 
 	for err == nil {
 		savedTracks = append(savedTracks, savedTrackPage.Tracks...)
@@ -27,7 +29,6 @@ func GetFavorites(client *spotify.Client) ([]spotify.SavedTrack, error) {
 
 func WriteToFile(
 	savedTracks []spotify.SavedTrack,
-	fields uint64,
 	encoder encoders.SavedTracksEncoder,
 	fileName string) error {
 
@@ -38,7 +39,7 @@ func WriteToFile(
 	defer f.Close()
 
 	w := bufio.NewWriter(f)
-	if err := encoder.Encode(savedTracks, fields, w); err != nil {
+	if err := encoder.Encode(savedTracks, w); err != nil {
 		return err
 	}
 	if err := w.Flush(); err != nil {

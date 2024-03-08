@@ -50,14 +50,6 @@ func main() {
 
 	core.WriteToFile(
 		favorites,
-		encoders.FieldNumber|
-			encoders.FieldAddedAt|
-			encoders.FieldAlbum|
-			encoders.FieldArtists|
-			encoders.FieldDuration|
-			encoders.FieldExplicit|
-			encoders.FieldId|
-			encoders.FieldName,
 		encoder,
 		fileName)
 }

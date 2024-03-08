@@ -7,21 +7,16 @@ import (
 )
 
 const (
-	// track general info
-	FieldNumber uint64 = 1 << iota
-	FieldAddedAt
-	FieldAlbum
-	FieldArtists
-	FieldDuration
-	FieldExplicit
-	FieldId
-	FieldName
-
-	// track features
-
-	// track analysis
+	TagNumber   string = "num"
+	TagAddedAt  string = "added_at"
+	TagAlbum    string = "album"
+	TagArtists  string = "artists"
+	TagDuration string = "duration"
+	TagExplicit string = "explicit"
+	TagId       string = "id"
+	TagName     string = "name"
 )
 
 type SavedTracksEncoder interface {
-	Encode([]spotify.SavedTrack, uint64, io.Writer) error
+	Encode([]spotify.SavedTrack, io.Writer) error
 }
