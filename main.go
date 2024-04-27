@@ -44,13 +44,17 @@ func main() {
 	tracks := make([]map[string]interface{}, 0, len(favorites))
 	encoding.EncodeSavedTracks(favorites, &tracks)
 
+	ids := make([]spotify.ID, 0, len(favorites))
+	for _, elem := range favorites {
+		ids = append(ids, elem.ID)
+	}
+
 	if *useAudioFeatures {
-		audioFeatures, err := core.GetAudioFeatures(client, favorites, progressChannel)
+		audioFeatures, err := core.GetAudioFeatures(client, ids, progressChannel)
 		if err != nil {
 			log.Fatal(err)
 		}
 		encoding.EncodeAudioFeatures(audioFeatures, &tracks)
-
 	}
 
 	currentDate := time.Now()

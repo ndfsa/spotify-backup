@@ -29,23 +29,19 @@ func GetFavorites(client *spotify.Client, update chan<- string) ([]spotify.Saved
 
 func GetAudioFeatures(
 	client *spotify.Client,
-	favorites []spotify.SavedTrack,
-	update chan<- string) ([]*spotify.AudioFeatures, error) {
-
-	total := len(favorites)
+	ids []spotify.ID,
+	update chan<- string,
+) ([]*spotify.AudioFeatures, error) {
+	total := len(ids)
 	audioFeatures := make([]*spotify.AudioFeatures, 0, total)
 
 	for i := 0; i <= total/100; i++ {
-		ids := make([]spotify.ID, 0, 100)
-
 		start := i * 100
 		end := min(total, start+100)
 
-		for _, entry := range favorites[start:end] {
-			ids = append(ids, entry.ID)
-		}
+		chunk := ids[start:end]
 
-		current, err := client.GetAudioFeatures(context.Background(), ids...)
+		current, err := client.GetAudioFeatures(context.Background(), chunk...)
 		if err != nil {
 			return audioFeatures, err
 		}
@@ -59,8 +55,8 @@ func GetAudioFeatures(
 
 func WriteToFile(
 	tracks []map[string]interface{},
-	fileName string) error {
-
+	fileName string,
+) error {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return err

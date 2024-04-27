@@ -23,7 +23,7 @@ const (
 	TagMode             string = "mode"
 	TagSpeechiness      string = "speechiness"
 	TagTempo            string = "tempo"
-	TagTimeSignature    string = "timeSignature"
+	TagTimeSignature    string = "time_signature"
 	TagValence          string = "valence"
 )
 
