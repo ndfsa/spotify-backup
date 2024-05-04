@@ -8,19 +8,18 @@ import (
 
 	"github.com/ndfsa/spotify-backup/auth"
 	"github.com/ndfsa/spotify-backup/core"
-	"github.com/ndfsa/spotify-backup/core/encoding"
 	"github.com/zmb3/spotify/v2"
 )
 
 func main() {
 	// get encoder from flags
-	useAudioFeatures := flag.Bool("A", false, "include audio features in backup")
+	useAudioFeatures := flag.Bool("a", false, "include audio features in track dump")
+	usePlaylist := flag.String("p", "", "dump playlist tracks, incompatible with '-f'")
 	flag.Parse()
 
 	ch := make(chan *spotify.Client)
 	auth.SetupAuth(ch)
-
-	client := <-ch
+	spotifyClient := <-ch
 
 	progressChannel := make(chan string)
 	qChannel := make(chan int)
@@ -36,31 +35,36 @@ func main() {
 		}
 	}()
 
-	favorites, err := core.GetFavorites(client, progressChannel)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tracks := make([]map[string]interface{}, 0, len(favorites))
-	encoding.EncodeSavedTracks(favorites, &tracks)
-
-	ids := make([]spotify.ID, 0, len(favorites))
-	for _, elem := range favorites {
-		ids = append(ids, elem.ID)
-	}
-
-	if *useAudioFeatures {
-		audioFeatures, err := core.GetAudioFeatures(client, ids, progressChannel)
+	var tracks []core.DumpTrack
+	if *usePlaylist != "" {
+		playlist, err := core.GetPlaylist(spotifyClient, spotify.ID(*usePlaylist), progressChannel)
 		if err != nil {
 			log.Fatal(err)
 		}
-		encoding.EncodeAudioFeatures(audioFeatures, &tracks)
+
+		tracks = playlist
+	} else {
+		favorites, err := core.GetFavorites(spotifyClient, progressChannel)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		tracks = favorites
 	}
 
 	currentDate := time.Now()
-	fileName := fmt.Sprintf("backup-%d-%02d-%02d.json",
+	fileName := fmt.Sprintf("trackdump-%d-%02d-%02d.json",
 		currentDate.Year(),
 		currentDate.Month(),
 		currentDate.Day())
-	core.WriteToFile(tracks, fileName)
+
+	if *useAudioFeatures {
+		fullTracks, err := core.GetAudioFeatures(spotifyClient, tracks, progressChannel)
+		if err != nil {
+			log.Fatal(err)
+		}
+		core.WriteToFile(fullTracks, fileName)
+	} else {
+		core.WriteToFile(tracks, fileName)
+	}
 }

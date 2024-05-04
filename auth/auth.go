@@ -19,13 +19,12 @@ var (
 	_    = godotenv.Load()
 	auth = spotifyauth.New(
 		spotifyauth.WithRedirectURL(redirectURI),
-		spotifyauth.WithScopes(spotifyauth.ScopeUserLibraryRead),
+		spotifyauth.WithScopes(spotifyauth.ScopeUserLibraryRead, spotifyauth.ScopePlaylistReadPrivate),
 	)
 	state = "backup_state"
 )
 
 func SetupAuth(ch chan<- *spotify.Client) {
-
 	// setup an http server to receive OAuth token
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		// get token from the request
