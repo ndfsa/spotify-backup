@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/zmb3/spotify/v2"
@@ -36,13 +35,13 @@ type FullDumpTrack struct {
 	DumpTrack
 }
 
-func NewFromPlaylistTrack(track spotify.PlaylistTrack) DumpTrack {
+func NewFromPlaylistTracks(track spotify.PlaylistTrack) DumpTrack {
 	fullTrack := track.Track
 	res := DumpTrack{
 		AddedAt:  track.AddedAt,
 		Album:    fullTrack.Album.Name,
 		Artists:  make([]string, 0, len(fullTrack.Artists)),
-		Duration: fullTrack.Duration,
+		Duration: int(fullTrack.Duration),
 		Explicit: fullTrack.Explicit,
 		Id:       fullTrack.ID.String(),
 		Name:     fullTrack.Name,
@@ -58,7 +57,7 @@ func NewFromSavedTrack(track spotify.SavedTrack) DumpTrack {
 		AddedAt:  track.AddedAt,
 		Album:    track.Album.Name,
 		Artists:  make([]string, 0, len(track.Artists)),
-		Duration: track.Duration,
+		Duration: int(track.Duration),
 		Explicit: track.Explicit,
 		Id:       track.ID.String(),
 		Name:     track.Name,
@@ -76,27 +75,30 @@ func UpgradeDumpTrack(track DumpTrack, features *spotify.AudioFeatures) FullDump
 		Danceability:     features.Danceability,
 		Energy:           features.Energy,
 		Instrumentalness: features.Instrumentalness,
-		Key:              features.Key,
+		Key:              int(features.Key),
 		Liveness:         features.Liveness,
 		Loudness:         features.Loudness,
-		Mode:             features.Mode,
+		Mode:             int(features.Mode),
 		Speechiness:      features.Speechiness,
 		Tempo:            features.Tempo,
-		TimeSignature:    features.TimeSignature,
+		TimeSignature:    int(features.TimeSignature),
 		Valence:          features.Valence,
 	}
 }
 
-func GetFavorites(client *spotify.Client, update chan<- string) ([]DumpTrack, error) {
+func GetFavorites(client *spotify.Client, update chan<- int) ([]DumpTrack, error) {
 	savedTrackPage, err := client.CurrentUsersTracks(context.Background(), spotify.Limit(50))
-	total := savedTrackPage.Total
+	if err != nil {
+		return []DumpTrack{}, nil
+	}
+	total := int(savedTrackPage.Total)
 	tracks := make([]DumpTrack, 0, total)
 
 	for err == nil {
 		for _, elem := range savedTrackPage.Tracks {
 			tracks = append(tracks, NewFromSavedTrack(elem))
 		}
-		update <- fmt.Sprintf("favorites: %d%%", 100*len(tracks)/total)
+		update <- 100 * len(tracks) / total
 		err = client.NextPage(context.Background(), savedTrackPage)
 	}
 
@@ -109,35 +111,34 @@ func GetFavorites(client *spotify.Client, update chan<- string) ([]DumpTrack, er
 func GetPlaylist(
 	client *spotify.Client,
 	id spotify.ID,
-	update chan<- string,
-) ([]DumpTrack, error) {
+	update chan<- int,
+) ([]DumpTrack, string, error) {
 	playlist, err := client.GetPlaylist(context.Background(), id, spotify.Limit(50))
 	if err != nil {
-		return []DumpTrack{}, err
+		return []DumpTrack{}, "", err
 	}
-	total := playlist.Tracks.Total
+	playlistTrackPage := playlist.Tracks
+	total := int(playlistTrackPage.Total)
 	tracks := make([]DumpTrack, 0, total)
 
-	playlistItemPage := playlist.Tracks
-
 	for err == nil {
-		for _, elem := range playlistItemPage.Tracks {
-			tracks = append(tracks, NewFromPlaylistTrack(elem))
+		for _, elem := range playlistTrackPage.Tracks {
+			tracks = append(tracks, NewFromPlaylistTracks(elem))
 		}
-		update <- fmt.Sprintf("%s: %d%%", playlist.Name, 100*len(tracks)/total)
-		err = client.NextPage(context.Background(), &playlistItemPage)
+		update <- 100 * len(tracks) / total
+		err = client.NextPage(context.Background(), &playlistTrackPage)
 	}
 
 	if err != spotify.ErrNoMorePages {
-		return nil, err
+		return nil, "", err
 	}
-	return tracks, nil
+	return tracks, playlist.Name, nil
 }
 
 func GetAudioFeatures(
 	client *spotify.Client,
 	tracks []DumpTrack,
-	update chan<- string,
+	update chan<- int,
 ) ([]FullDumpTrack, error) {
 	total := len(tracks)
 	fullTracks := make([]FullDumpTrack, 0, total)
@@ -160,7 +161,7 @@ func GetAudioFeatures(
 			fullTracks = append(fullTracks, UpgradeDumpTrack(elem, features[idx]))
 		}
 
-		update <- fmt.Sprintf("audio features: %d%%", 100*len(fullTracks)/total)
+		update <- 100 * len(fullTracks) / total
 	}
 
 	return fullTracks, nil

@@ -6,59 +6,68 @@ import (
 	"log"
 	"time"
 
-	"github.com/ndfsa/spotify-backup/auth"
-	"github.com/ndfsa/spotify-backup/core"
 	"github.com/zmb3/spotify/v2"
+	"spotify-backup/auth"
+	"spotify-backup/core"
 )
+
+var versionId = "dev"
 
 func main() {
 	// get encoder from flags
 	useAudioFeatures := flag.Bool("a", false, "include audio features in track dump")
-	usePlaylist := flag.String("p", "", "dump playlist tracks, incompatible with '-f'")
+	usePlaylist := flag.String("p", "", "dump playlist tracks")
+	version := flag.Bool("v", false, "print version")
 	flag.Parse()
 
-	ch := make(chan *spotify.Client)
-	auth.SetupAuth(ch)
-	spotifyClient := <-ch
+	if *version {
+		fmt.Println(versionId)
+		return
+	}
 
-	progressChannel := make(chan string)
-	qChannel := make(chan int)
+	spotifyClient := auth.GetClient()
+
+	progressChannel := make(chan int)
 	go func() {
 		for {
-			var progress string
-			select {
-			case progress = <-progressChannel:
-				fmt.Println(progress)
-			case <-qChannel:
-				return
-			}
+			fmt.Printf("progress: %d\n", <-progressChannel)
 		}
 	}()
 
 	var tracks []core.DumpTrack
+	var prefix string
 	if *usePlaylist != "" {
-		playlist, err := core.GetPlaylist(spotifyClient, spotify.ID(*usePlaylist), progressChannel)
+		fmt.Println("Dumping playlist tracks")
+		playlist, name, err := core.GetPlaylist(
+			spotifyClient,
+			spotify.ID(*usePlaylist),
+			progressChannel)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		tracks = playlist
+		prefix = fmt.Sprintf("playlist-(%s)", name)
 	} else {
+		fmt.Println("Dumping favorite tracks")
 		favorites, err := core.GetFavorites(spotifyClient, progressChannel)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		tracks = favorites
+		prefix = "favorites"
 	}
 
 	currentDate := time.Now()
-	fileName := fmt.Sprintf("trackdump-%d-%02d-%02d.json",
+	fileName := fmt.Sprintf("%s-%d-%02d-%02d.json",
+		prefix,
 		currentDate.Year(),
 		currentDate.Month(),
 		currentDate.Day())
 
 	if *useAudioFeatures {
+		fmt.Println("Adding audio features to dump data")
 		fullTracks, err := core.GetAudioFeatures(spotifyClient, tracks, progressChannel)
 		if err != nil {
 			log.Fatal(err)

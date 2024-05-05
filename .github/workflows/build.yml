@@ -1,0 +1,74 @@
+name: Release new version
+run-name: ${{ github.actor }} is currently preparing a new release
+
+on:
+ push:
+   branches:
+     - main
+
+jobs:
+  build:
+    name: Build go project
+    environment: production
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version-tag.outputs.VERSION }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: 'main'
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22.2'
+
+    - name: Create version tag
+      id: version-tag
+      run: |
+        echo "VERSION=$(date +%y.%m.%d).$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Build
+      env:
+        SPOTIFY_ID: ${{ secrets.SPOTIFY_ID }}
+        VERSION: ${{ steps.version-tag.outputs.VERSION }}
+      run: go build -ldflags="-X spotify-backup/auth.clientId=$SPOTIFY_ID -X main.versionId=$VERSION"
+
+    - name: Compress files
+      run: tar -czvf spotify-backup.tar.gz ./spotify-backup
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: spotify-backup
+        path: ./spotify-backup.tar.gz
+        retention-days: 1
+  
+  release:
+    name: Create release
+    needs: [build]
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spotify-backup
+
+      - name: Generate checksums
+        run: sha256sum spotify-backup.tar.gz > spotify-backup.sha256sum
+
+      - name: Remove previous release
+        run: gh release delete stable --yes || true
+
+      - name: Publish release
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          gh release create stable --title "$VERSION" --target $GITHUB_SHA ./spotify-backup*
