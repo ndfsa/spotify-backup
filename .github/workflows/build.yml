@@ -41,12 +41,13 @@ jobs:
     - name: Archive build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: spotify-backup
+        name: spotify-backup-linux
         path: ./spotify-backup.tar.gz
         retention-days: 1
 
   build-windows:
     name: Build go project
+    environment: production
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version-tag.outputs.VERSION }}
@@ -65,43 +66,49 @@ jobs:
     - name: Create version tag
       id: version-tag
       run: |
-        echo "VERSION=$(Get-Date -Format 'yy.MM.dd').$(git rev-parse --short HEAD)" >> $env:GITHUB_OUTPUT
+        echo "VERSION=$(Get-Date -Format 'yy.MM.dd').$(git rev-parse --short HEAD)" >> ${Env:GITHUB_OUTPUT}
 
     - name: Build
       env:
         SPOTIFY_ID: ${{ secrets.SPOTIFY_ID }}
         VERSION: ${{ steps.version-tag.outputs.VERSION }}
-      run: go build -ldflags="-s -w -X spotify-backup/auth.clientId=$env:SPOTIFY_ID -X main.versionId=$env:VERSION"
+      run: go build -ldflags="-s -w -X spotify-backup/auth.clientId=${Env:SPOTIFY_ID} -X main.versionId=${Env:VERSION}"
 
     - name: Compress files
-      run: Compress-Archive -Path ./spotify-backup -DestinationPath ./spotify-backup.zip
+      run: Compress-Archive -Path ./spotify-backup.exe -DestinationPath ./spotify-backup.zip
 
     - name: Archive build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: spotify-backup
+        name: spotify-backup-windows
         path: ./spotify-backup.zip
         retention-days: 1
 
-    release:
-      name: Create release
-      needs: [build-linux, build-windows]
-      runs-on: ubuntu-latest
-      permissions:
-        contents: write
+  release:
+    name: Create release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         ref: 'main'
+
     - uses: actions/download-artifact@v4
       with:
-        name: spotify-backup
+        name: spotify-backup-linux
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: spotify-backup-windows
 
     - name: Generate checksums
-      run: sha256sum spotify-backup.tar.gz > spotify-backup.tar.gz.sha256sum
-      run: sha256sum spotify-backup.zip > spotify-backup.zip.sha256sum
+      run: |
+        sha256sum spotify-backup.tar.gz > spotify-backup.tar.gz.sha256sum
+        sha256sum spotify-backup.zip > spotify-backup.zip.sha256sum
 
     - name: Remove previous release
       env:
@@ -117,4 +124,4 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         VERSION: ${{ needs.build-linux.outputs.version }}
       run: |
-        gh release create stable --notes-file "$GITHUB_WORKSPACE/.github/workflows/notes.md" --title "$VERSION" --target $GITHUB_SHA spotify-backup.tar.gz spotify-backup.sha256sum
+        gh release create stable --notes-file "$GITHUB_WORKSPACE/.github/workflows/notes.md" --title "$VERSION" --target $GITHUB_SHA spotify-backup.tar.gz spotify-backup.zip spotify-backup.tar.gz.sha256sum spotify-backup.zip.sha256sum
