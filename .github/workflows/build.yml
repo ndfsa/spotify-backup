@@ -6,7 +6,7 @@ on:
      - main
 
 jobs:
-  build:
+  build-linux:
     name: Build go project
     environment: production
     runs-on: ubuntu-latest
@@ -22,7 +22,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22.2'
+        go-version: '1.22.3'
 
     - name: Create version tag
       id: version-tag
@@ -44,13 +44,51 @@ jobs:
         name: spotify-backup
         path: ./spotify-backup.tar.gz
         retention-days: 1
-  
-  release:
-    name: Create release
-    needs: [build]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+
+  build-windows:
+    name: Build go project
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version-tag.outputs.VERSION }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: 'main'
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22.3'
+
+    - name: Create version tag
+      id: version-tag
+      run: |
+        echo "VERSION=$(Get-Date -Format 'yy.MM.dd').$(git rev-parse --short HEAD)" >> $env:GITHUB_OUTPUT
+
+    - name: Build
+      env:
+        SPOTIFY_ID: ${{ secrets.SPOTIFY_ID }}
+        VERSION: ${{ steps.version-tag.outputs.VERSION }}
+      run: go build -ldflags="-s -w -X spotify-backup/auth.clientId=$env:SPOTIFY_ID -X main.versionId=$env:VERSION"
+
+    - name: Compress files
+      run: Compress-Archive -Path ./spotify-backup -DestinationPath ./spotify-backup.zip
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: spotify-backup
+        path: ./spotify-backup.zip
+        retention-days: 1
+
+    release:
+      name: Create release
+      needs: [build-linux, build-windows]
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write
 
     steps:
     - name: Checkout repository
@@ -62,7 +100,8 @@ jobs:
         name: spotify-backup
 
     - name: Generate checksums
-      run: sha256sum spotify-backup.tar.gz > spotify-backup.sha256sum
+      run: sha256sum spotify-backup.tar.gz > spotify-backup.tar.gz.sha256sum
+      run: sha256sum spotify-backup.zip > spotify-backup.zip.sha256sum
 
     - name: Remove previous release
       env:
@@ -76,6 +115,6 @@ jobs:
       env:
         GH_REPO: ${{ github.repository }}
         GH_TOKEN: ${{ github.token }}
-        VERSION: ${{ needs.build.outputs.version }}
+        VERSION: ${{ needs.build-linux.outputs.version }}
       run: |
         gh release create stable --notes-file "$GITHUB_WORKSPACE/.github/workflows/notes.md" --title "$VERSION" --target $GITHUB_SHA spotify-backup.tar.gz spotify-backup.sha256sum
