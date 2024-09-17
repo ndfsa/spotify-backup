@@ -60,8 +60,7 @@ func main() {
 	}
 
 	currentDate := time.Now()
-	fileName := fmt.Sprintf("%s-%d-%02d-%02d.json",
-		prefix,
+	fileName := fmt.Sprintf("%d-%02d-%02d.json",
 		currentDate.Year(),
 		currentDate.Month(),
 		currentDate.Day())
@@ -72,8 +71,8 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		core.WriteToFile(fullTracks, fileName)
+		core.WriteToFile(fullTracks, fmt.Sprintf("%s-full-%s", prefix, fileName))
 	} else {
-		core.WriteToFile(tracks, fileName)
+		core.WriteToFile(tracks, fmt.Sprintf("%s-%s", prefix, fileName))
 	}
 }
