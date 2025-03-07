@@ -6,9 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
+	"os/user"
 
+	"github.com/zalando/go-keyring"
 	"github.com/zmb3/spotify/v2"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
 	"golang.org/x/oauth2"
@@ -16,45 +19,85 @@ import (
 
 var clientId = "INVALID"
 
-func GenerateRandomString(n int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	buffer := make([]byte, 0, n)
-	for ; n > 0; n-- {
+const (
+	charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	port    = "8080"
+	service = "spotify-backup"
+)
+
+func generateRandomString(n int) string {
+	buffer := make([]byte, n)
+	for i := range buffer {
 		next, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
-		buffer = append(buffer, charset[next.Int64()])
+		buffer[i] = charset[next.Int64()]
 	}
 	return string(buffer)
 }
 
 func GetClient() *spotify.Client {
-	// setup callback url
-	port := "8080"
 	redirectURI := "http://localhost:" + port + "/callback"
 
-	// setup auth client with id
 	auth := spotifyauth.New(
 		spotifyauth.WithRedirectURL(redirectURI),
-		spotifyauth.WithScopes(spotifyauth.ScopeUserLibraryRead,
+		spotifyauth.WithScopes(
+			spotifyauth.ScopeUserLibraryRead,
 			spotifyauth.ScopePlaylistReadPrivate),
 		spotifyauth.WithClientID(clientId))
 
-	// set state for OAuth workflow
-	state := GenerateRandomString(64)
+	token := getToken(auth)
 
-	// setup channels for execution
-	ch := make(chan *spotify.Client)
+	return spotify.New(auth.Client(context.Background(), token))
+}
 
-	// setup PKCE variables
-	codeVerifier := GenerateRandomString(128)
+func getToken(auth *spotifyauth.Authenticator) *oauth2.Token {
+	user, err := user.Current()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	secret, err := keyring.Get(service, user.Username)
+	if err != nil {
+		return getNewToken(auth, port, user.Username)
+	}
+
+	token, err := refreshToken(secret, auth, user.Username)
+	if err != nil {
+		return getNewToken(auth, port, user.Username)
+	}
+
+	return token
+}
+
+func refreshToken(
+	secret string,
+	auth *spotifyauth.Authenticator,
+	user string,
+) (*oauth2.Token, error) {
+	token, err := auth.RefreshToken(context.Background(), &oauth2.Token{RefreshToken: secret})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := keyring.Set(service, user, token.RefreshToken); err != nil {
+		log.Fatal(err)
+	}
+
+	return token, nil
+}
+
+func getNewToken(auth *spotifyauth.Authenticator, port, user string) *oauth2.Token {
+	state := generateRandomString(64)
+	ch := make(chan *oauth2.Token)
+
+	// PKCE variables
+	codeVerifier := generateRandomString(128)
 	sum := sha256.Sum256([]byte(codeVerifier))
 	codeChallenge := base64.RawURLEncoding.EncodeToString(sum[:])
 
-	// setup an http server to receive OAuth token
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		// get token from the request
 		token, err := auth.Token(r.Context(), state, r,
 			oauth2.SetAuthURLParam("code_verifier", codeVerifier))
 		if err != nil {
@@ -62,36 +105,30 @@ func GetClient() *spotify.Client {
 			return
 		}
 
-		// verify the state
 		if st := r.FormValue("state"); st != state {
 			http.NotFound(w, r)
 		}
 
-		// create new spotify client
-		client := spotify.New(auth.Client(r.Context(), token))
+		ch <- token
 
 		fmt.Fprint(w, "Login successful!")
-
-		// send client to chanel
-		ch <- client
 	})
 
 	srv := &http.Server{Addr: ":" + port}
-
-	// launch callback server in background task
 	go srv.ListenAndServe()
 
-	// show the authorization url to the user
 	url := auth.AuthURL(state,
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 		oauth2.SetAuthURLParam("code_challenge", codeChallenge))
 	fmt.Println("Follow and login: ", url)
 
-	// wait for a client
-	client := <-ch
-
-	// shutdown the server
+	token := <-ch
 	srv.Shutdown(context.Background())
 
-	return client
+	err := keyring.Set(service, user, token.RefreshToken)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return token
 }

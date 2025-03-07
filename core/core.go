@@ -69,6 +69,9 @@ func NewFromSavedTrack(track spotify.SavedTrack) DumpTrack {
 }
 
 func UpgradeDumpTrack(track DumpTrack, features *spotify.AudioFeatures) FullDumpTrack {
+	if features == nil {
+		return FullDumpTrack{DumpTrack: track}
+	}
 	return FullDumpTrack{
 		DumpTrack:        track,
 		Acousticness:     features.Acousticness,
