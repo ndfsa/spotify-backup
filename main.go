@@ -4,11 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
+	"path"
 	"time"
 
-	"github.com/zmb3/spotify/v2"
 	"spotify-backup/auth"
 	"spotify-backup/core"
+
+	"github.com/zmb3/spotify/v2"
 )
 
 var versionId = "dev"
@@ -37,10 +40,19 @@ func main() {
 	var tracks []core.DumpTrack
 	var prefix string
 	if *usePlaylist != "" {
+		uri, err := url.Parse(*usePlaylist)
+
+		var playlistId string
+		if err != nil {
+			playlistId = *usePlaylist
+		} else {
+			playlistId = path.Base(uri.Path)
+		}
+
 		fmt.Println("Dumping playlist tracks")
 		playlist, name, err := core.GetPlaylist(
 			spotifyClient,
-			spotify.ID(*usePlaylist),
+			spotify.ID(playlistId),
 			progressChannel)
 		if err != nil {
 			log.Fatal(err)
